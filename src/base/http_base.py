@@ -1,9 +1,11 @@
 import abc
 import urllib.request
+
+
 class HttpBase(object):
     """
     Object using urllib.request to obtain
-    a HTML page given a url dependent on 
+    a HTML page given a url dependent on
     some arguments.
     """
     @property

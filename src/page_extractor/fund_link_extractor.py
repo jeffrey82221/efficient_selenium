@@ -1,10 +1,13 @@
 from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
+
+
 class LinkPage(HttpBase):
     def get_url(self, page_number):
         assert page_number >= 1
-        assert type(page_number) == int
+        assert isinstance(page_number, int)
         return f'https://fund.cnyes.com/search/?page={page_number}'
+
 
 class LinkExtractor(HtmlBase):
     def extract_info(self):

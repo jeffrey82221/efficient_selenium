@@ -1,13 +1,16 @@
 import abc
 from bs4 import BeautifulSoup
+
+
 class HtmlBase(object):
     """
     Object using BeautifulSoup to extract
     information from an HTML page.
     """
+
     def __init__(self, html):
         self.soup = BeautifulSoup(html, 'html.parser')
-        
+
     @abc.abstractmethod
     def extract_info(self, *args, **kargs):
         """

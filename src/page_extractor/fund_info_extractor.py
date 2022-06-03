@@ -1,8 +1,11 @@
 from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
+
+
 class FundDocumentPage(HttpBase):
     def get_url(self, url):
         return url.replace('/report/', '/document/')
+
 
 class FundInfoExtractor(HtmlBase):
     def extract_info(self):
@@ -16,13 +19,13 @@ class FundInfoExtractor(HtmlBase):
         fund_info = {
             **self.__extract_fund_info(base_info),
             **self.__extract_fund_info(fee_info)
-            }
+        }
         return fund_info
 
     @property
     def isin(self):
         return self.extract_info()['ISIN']
-        
+
     @property
     def company(self):
         return self.extract_info()['基金管理公司']
@@ -35,9 +38,7 @@ class FundInfoExtractor(HtmlBase):
             tds = col.find_all('td')
             for th, td in zip(ths, tds):
                 result.append((
-                    th.get_text(), 
+                    th.get_text(),
                     td.get_text()
-                    ))
+                ))
         return dict(result)
-
-    

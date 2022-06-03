@@ -2,22 +2,28 @@ import abc
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 import gc
+
+
 class SeleniumBase(object):
     """
     Object using selenium to obtain
-    a HTML page given a url dependent on 
+    a HTML page given a url dependent on
     some arguments.
     """
+
     def __init__(self):
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         try:
-            self.driver = webdriver.Chrome('chromedriver', options=chrome_options)
-        except:
-            self.driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
-    
+            self.driver = webdriver.Chrome(
+                'chromedriver', options=chrome_options)
+        except BaseException:
+            self.driver = webdriver.Chrome(
+                ChromeDriverManager().install(),
+                options=chrome_options)
+
     @property
     @abc.abstractmethod
     def url(self):
@@ -39,8 +45,8 @@ class SeleniumBase(object):
             self.get_url(*args, **kargs)
         )
         html = self.driver.page_source
-        return html   
-    
+        return html
+
     def __del__(self):
         self.driver.quit()
         del self.driver

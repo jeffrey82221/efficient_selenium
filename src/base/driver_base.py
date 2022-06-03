@@ -1,6 +1,7 @@
 
 import abc
 from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
 import gc
 class SeleniumBase(object):
     """
@@ -13,7 +14,10 @@ class SeleniumBase(object):
         chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
-        self.driver = webdriver.Chrome('chromedriver', options=chrome_options)
+        try:
+            self.driver = webdriver.Chrome('chromedriver', options=chrome_options)
+        except:
+            self.driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
     
     @property
     @abc.abstractmethod

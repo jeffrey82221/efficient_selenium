@@ -1,5 +1,5 @@
 import tqdm
-from src.downloader.fund_links_downloader import ParallelFundLinkDownloader
+from src.downloader.fund_link_downloader import ParallelFundLinkDownloader
 from src.downloader.fund_info_downloader import ParallelFundInfoDownloader
 import pickle
 downloader = ParallelFundLinkDownloader(20)

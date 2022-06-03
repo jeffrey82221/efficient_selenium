@@ -1,5 +1,5 @@
-from src.processors.main_page import FundCountExtractor, MainPage
-from src.processors.fund_link_pages import LinkPage, LinkExtractor
+from src.page_extractor.fund_cnt_extractor import FundCountExtractor, MainPage
+from src.page_extractor.fund_link_extractor import LinkPage, LinkExtractor
 
 class SerialFundLinkDownloader:
     def __init__(self):
@@ -28,7 +28,7 @@ class SerialFundLinkDownloader:
 import ray
 import gc
 @ray.remote
-class FundLinkProducer:
+class _FundLinkProducer:
     def __init__(self):
         self.__link_page = LinkPage()
         self.__generator = None
@@ -52,7 +52,7 @@ class ParallelFundLinkDownloader:
         self.fund_count = FundCountExtractor(main_page.get_html_by_url()).extract_info()
         del main_page
         self.parallel_cnt = parallel_cnt
-        self.producer_pool = [FundLinkProducer.remote()] * parallel_cnt
+        self.producer_pool = [_FundLinkProducer.remote()] * parallel_cnt
     def fund_link_generator(self):
         page_index = 1
         producer_index = 0

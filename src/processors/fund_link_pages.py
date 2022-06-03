@@ -1,6 +1,6 @@
 from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
-class LinkPageDriver(HttpBase):
+class LinkPage(HttpBase):
     def get_url(self, page_number):
         assert page_number >= 1
         assert type(page_number) == int
@@ -19,6 +19,9 @@ class LinkExtractor(HtmlBase):
     def get_name_n_link(self, tr):
         try:
             a = tr.find_all('a')[0]
-            return a.get_text(), 'https://fund.cnyes.com' + a['href']
+            name = a.get_text()
+            url = 'https://fund.cnyes.com' + a['href']
+            assert url.endswith('/report/')
+            return name, url
         except (IndexError, KeyError):
             return None

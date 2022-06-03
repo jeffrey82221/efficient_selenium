@@ -1,7 +1,7 @@
-from src.base.driver_base import SeleniumBase
+from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
 
-class MainPageDriver(SeleniumBase):
+class MainPageDriver(HttpBase):
     @property
     def url(self):
         return 'https://fund.cnyes.com/search/'

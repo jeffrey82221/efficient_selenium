@@ -1,6 +1,6 @@
-from src.base.driver_base import SeleniumBase
+from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
-class LinkPageDriver(SeleniumBase):
+class LinkPageDriver(HttpBase):
     def get_url(self, page_number):
         assert page_number >= 1
         assert type(page_number) == int

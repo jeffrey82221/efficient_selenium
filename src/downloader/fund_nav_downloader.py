@@ -1,6 +1,11 @@
 """
 TODO: 
 - [X] Remove table if exist
+- [ ] Refactor: combine initialize & nav_segment_generator -> Nav Batch Generator
+- [ ] Refactor: seperate isin,company extraction 
+    -> 1. [ ] build pipe (load isin & company here)
+    -> 2. [ ] run pipe (delete table at exception)
+- [ ] Make sure chromedriver is deleted when KeyboradException occur
 """
 from src.page_extractor.fund_nav_extractor import NavView, NavExtractor
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
@@ -13,13 +18,17 @@ import pprint
 import os
 import traceback
 import gc
+import time
+import random
+
 VERBOSE = False
 TQDM_VERBOSE = True
 @ray.remote
 class _FundNavExtractActor:
-    def __init__(self):
+    def __init__(self, pending_time=0):
         self._nav_selenium = NavView()
-
+        self._pending_time = pending_time
+        self._first_try = True
     def quit(self):
         self._nav_selenium.quit()
 
@@ -31,13 +40,16 @@ class _FundNavExtractActor:
 
     def request(self, input_tuple):
         try:
+            if self._first_try:
+                time.sleep(int(self._pending_time * random.random()))
+                self._first_try = False
             gc.collect()
             fund, url = input_tuple
-            self._nav_selenium.initialize(url)
             info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
             isin = info_extractor.isin
             company = info_extractor.company
             self.delete_table(company, isin)
+            self._nav_selenium.initialize(url)
             nav_segment_gen = self._nav_segment_generator()
             if TQDM_VERBOSE:
                 for item in tqdm.tqdm(
@@ -56,11 +68,12 @@ class _FundNavExtractActor:
                         partial(self._save_to_h5, isin=isin, company=company),
                         nav_segment_gen
                     ))
+            self._nav_selenium.driver.refresh()
             return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
         except BaseException:
             result = f"NAV DOWNLOAD FAILED:\n{fund}\nURL:\n{url}"
             print(result)
-            traceback.print_exc()
+            print(traceback.format_exc())
             self._nav_selenium.driver.refresh()
             try:
                 self.delete_table(company, isin)
@@ -100,7 +113,7 @@ class _FundNavExtractActor:
 
 class ParallelFundNavDownloader:
     def __init__(self, parallel_cnt):
-        self._actors = [_FundNavExtractActor.remote()
+        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20)
                     for i in range(parallel_cnt)]
         self._pool = ActorPool(self._actors)
 

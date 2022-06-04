@@ -2,3 +2,4 @@ ray==1.12.1
 selenium==4.2.0
 webdriver_manager==3.7.0
 bs4==0.0.1
+pandas==1.4.2

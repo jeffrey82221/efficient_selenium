@@ -1,6 +1,6 @@
 """
 TODO: 
-- [ ] Remove table if exist
+- [X] Remove table if exist
 """
 from src.page_extractor.fund_nav_extractor import NavView, NavExtractor
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
@@ -12,8 +12,9 @@ from ray.util import ActorPool
 import pprint
 import os
 import traceback
+import gc
 VERBOSE = False
-TQDM_VERBOSE = False
+TQDM_VERBOSE = True
 @ray.remote
 class _FundNavExtractActor:
     def __init__(self):
@@ -30,6 +31,7 @@ class _FundNavExtractActor:
 
     def request(self, input_tuple):
         try:
+            gc.collect()
             fund, url = input_tuple
             self._nav_selenium.initialize(url)
             info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
@@ -55,17 +57,17 @@ class _FundNavExtractActor:
                         nav_segment_gen
                     ))
             return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
-        except BaseException as e:
+        except BaseException:
             result = f"NAV DOWNLOAD FAILED:\n{fund}\nURL:\n{url}"
             print(result)
             traceback.print_exc()
-            self.quite()
-            print('Selenium driver stopped')
-            self.delete_table(company, isin)
-            print('Stored Table deleted')
-            self._nav_selenium = NavView()
-            print('Selenium driver restart')
+            self._nav_selenium.driver.refresh()
+            try:
+                self.delete_table(company, isin)
+            except:
+                pass
             return result
+        
 
     def _nav_segment_generator(self):
         for i in range(self._nav_selenium.max_page_count):

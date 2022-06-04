@@ -1,3 +1,7 @@
+"""
+TODO: 
+- [ ] add 404 exception and print the suspicious url
+"""
 import abc
 import urllib.request
 

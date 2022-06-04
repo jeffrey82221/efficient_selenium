@@ -30,7 +30,7 @@ class FundNavExtractActor:
                 assert nav_selenium.has_next_page()
                 nav_selenium.goto_next_page()
             except AssertionError:
-                raise StopIteration()
+                break
 
     def save_to_h5(self, nav_segment, isin='default', company='default'):
         table = pd.DataFrame(nav_segment)

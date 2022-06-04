@@ -4,8 +4,12 @@ from src.base.html_base import HtmlBase
 
 class FundDocumentPage(HttpBase):
     def get_url(self, url):
-        return url.replace('/report/', '/document/')
-
+        if '/report/' in url:
+            return url.replace('/report/', '/document/')
+        elif url.endswith('/'):
+            return url + 'document/'
+        else:
+            return url + '/document/'
 
 class FundInfoExtractor(HtmlBase):
     def extract_info(self):
@@ -20,6 +24,7 @@ class FundInfoExtractor(HtmlBase):
             **self.__extract_fund_info(base_info),
             **self.__extract_fund_info(fee_info)
         }
+        print(fund_info)
         return fund_info
 
     @property

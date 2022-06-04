@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import gc
 import pprint
 
+
 class _LastPageExtractor(HtmlBase):
     def extract_info(self):
         soup = self.soup
@@ -15,10 +16,12 @@ class _LastPageExtractor(HtmlBase):
         page_count = int(page_buttoms[0].parent.parent.findChildren()[-1].text)
         return page_count
 
+
 class NavView(SeleniumBase):
     def __init__(self, verbose=False):
         super().__init__()
         self.__verbose = verbose
+
     def initialize(self, url):
         self.url = url
         self.load_url(url)
@@ -27,9 +30,10 @@ class NavView(SeleniumBase):
             EC.presence_of_element_located((By.XPATH, "//a[@data-value='1']"))
         )
         self.current_page_buttom_class_name = buttom_1.get_attribute("class")
-        self.max_page_count = _LastPageExtractor(self.get_html()).extract_info()
+        self.max_page_count = _LastPageExtractor(
+            self.get_html()).extract_info()
         gc.collect()
-            
+
     def show_current_states(self):
         pprint.pprint({
             'url': self.url,
@@ -62,12 +66,12 @@ class NavView(SeleniumBase):
         }}
         """
         self.driver.execute_script(java_script)
-    
+
     def wait_state_change(self, page_index):
         xpath_selector = f"//a[@class='{self.current_page_buttom_class_name}']"
         WebDriverWait(self.driver, 20).until(
             EC.text_to_be_present_in_element((
-                By.XPATH, 
+                By.XPATH,
                 xpath_selector
             ), str(page_index))
         )
@@ -82,6 +86,7 @@ class NavExtractor(HtmlBase):
         rows = nav_table.find_all('tr')[1:]
         date_n_navs = list(map(self.extract_date_n_nav_from_row, rows))
         return date_n_navs
+
     def extract_date_n_nav_from_row(self, row):
         cells = row.find_all('td')
         return cells[0].get_text(), float(cells[1].get_text())

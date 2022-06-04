@@ -17,7 +17,8 @@ class SeleniumBase(object):
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_prefs = {}
         chrome_prefs["profile.default_content_settings"] = {"images": 2}
-        chrome_prefs["profile.managed_default_content_settings"] = {"images": 2}
+        chrome_prefs["profile.managed_default_content_settings"] = {
+            "images": 2}
         chrome_options.experimental_options["prefs"] = chrome_prefs
         try:
             self.driver = webdriver.Chrome(
@@ -26,7 +27,7 @@ class SeleniumBase(object):
             self.driver = webdriver.Chrome(
                 ChromeDriverManager().install(),
                 options=chrome_options)
-        
+
     def load_url(self, url):
         self.driver.get(url)
 
@@ -39,11 +40,9 @@ class SeleniumBase(object):
     @abc.abstractmethod
     def make_action(self, *arg, **kargs):
         """
-        Example:        
+        Example:
         button = WebDriverWait(self.driver, 20).until(
                 EC.element_to_be_clickable((By.LINK_TEXT, text))
             ).click()
         """
         pass
-        
-

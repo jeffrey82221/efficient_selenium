@@ -24,7 +24,6 @@ class FundInfoExtractor(HtmlBase):
             **self.__extract_fund_info(base_info),
             **self.__extract_fund_info(fee_info)
         }
-        print(fund_info)
         return fund_info
 
     @property

@@ -9,7 +9,6 @@ class FundNavExtractActor:
         fund, url = input_tuple
         nav_selenium = NavView()
         nav_selenium.initialize(url)
-        html = nav_selenium.get_html()
         info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
         print(info_extractor.extract_info())
         isin = info_extractor.isin

@@ -10,6 +10,7 @@ import tqdm
 import ray
 from ray.util import ActorPool
 import pprint
+import os
 VERBOSE = False
 TQDM_VERBOSE = True
 @ray.remote
@@ -26,6 +27,8 @@ class _FundNavExtractActor:
         info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
         isin = info_extractor.isin
         company = info_extractor.company
+        if os.path.exists(self.__get_table_path(company, isin)):
+            os.remote(self.__get_table_path(company, isin))
         nav_segment_gen = self._nav_segment_generator()
         if TQDM_VERBOSE:
             for item in tqdm.tqdm(
@@ -44,7 +47,7 @@ class _FundNavExtractActor:
                     partial(self._save_to_h5, isin=isin, company=company),
                     nav_segment_gen
                 ))
-        return f"NAV DOWNLOAD OF {fund}:{isin} COMPLETE"
+        return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
 
     def _nav_segment_generator(self):
         for i in range(self._nav_selenium.max_page_count):
@@ -62,8 +65,18 @@ class _FundNavExtractActor:
             print(f'isin: {isin}; company: {company}')
             pprint.pprint(table)
         table.columns = ['date', 'nav']
-        table.to_hdf(f'data/nav/{company}.h5', isin, append=True)
+        directory = self.__get_table_folder(company)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        table.to_hdf(self.__get_table_path(company, isin), 'nav', append=True)
         return str(table['date'].values[-1])
+    
+    def __get_table_path(self, company, isin):
+        return f'{self.__get_table_folder(company)}/{isin}.h5'
+
+    def __get_table_folder(self, company):
+        return f'data/nav/{company}'
+    
 
 class ParallelFundNavDownloader:
     def __init__(self, parallel_cnt):

@@ -4,20 +4,49 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import gc
+import pprint
+
+class _LastPageExtractor(HtmlBase):
+    def extract_info(self):
+        soup = self.soup
+        a_elements = soup.find_all('a')
+        page_buttoms = list(filter(
+            lambda a: a.has_attr('data-value'), a_elements))
+        page_count = int(page_buttoms[0].parent.parent.findChildren()[-1].text)
+        return page_count
 
 class NavView(SeleniumBase):
+    def __init__(self, verbose=False):
+        super().__init__()
+        self.__verbose = verbose
     def initialize(self, url):
+        self.url = url
         self.load_url(url)
-        self.current_page = 1
+        self.current_page_index = 1
         buttom_1 = WebDriverWait(self.driver, 20).until(
             EC.presence_of_element_located((By.XPATH, "//a[@data-value='1']"))
         )
         self.current_page_buttom_class_name = buttom_1.get_attribute("class")
+        self.max_page_count = _LastPageExtractor(self.get_html()).extract_info()
+        gc.collect()
+            
+    def show_current_states(self):
+        pprint.pprint({
+            'url': self.url,
+            'max_page_count': self.max_page_count,
+            'current_page_buttom_class_name': self.current_page_buttom_class_name,
+            'current_page': self.current_page_index
+        })
+
+    def has_next_page(self):
+        return self.current_page_index < self.max_page_count
 
     def goto_next_page(self):
+        assert self.current_page_index < self.max_page_count
         self.make_action()
-        self.current_page += 1
-        self.wait_state_change(self.current_page)
+        self.current_page_index += 1
+        self.wait_state_change(self.current_page_index)
 
     def make_action(self):
         buttom_name = '下一頁'
@@ -59,21 +88,13 @@ class NavExtractor(HtmlBase):
         return cells[0].get_text(), float(cells[1].get_text())
 
 nav_selenium = NavView()
-nav_selenium.initialize("https://fund.cnyes.com/detail/%E5%AF%8C%E8%98%AD%E5%85%8B%E6%9E%97%E5%9D%A6%E4%BC%AF%E9%A0%93%E5%85%A8%E7%90%83%E6%8A%95%E8%B3%87%E7%B3%BB%E5%88%97-%E5%85%A8%E7%90%83%E5%B9%B3%E8%A1%A1%E5%9F%BA%E9%87%91%E7%BE%8E%E5%85%83A%20(acc)%E8%82%A1/B15%2C101/report/")
+nav_selenium.initialize("https://fund.cnyes.com/detail/%E4%B8%AD%E5%9C%8B%E4%BF%A1%E8%A8%97%20ESG%20%E7%A2%B3%E5%95%86%E6%A9%9F%E5%A4%9A%E9%87%8D%E8%B3%87%E7%94%A2%E5%9F%BA%E9%87%91-%E8%87%BA%E5%B9%A3B/A26105/report/")
+nav_segment = NavExtractor(nav_selenium.get_html()).extract_info()
+pprint.pprint(nav_segment)
+while nav_selenium.has_next_page():
+    nav_selenium.goto_next_page()
+    nav_selenium.show_current_states()
+    nav_segment = NavExtractor(nav_selenium.get_html()).extract_info()
+    pprint.pprint(nav_segment)
 
-html = nav_selenium.get_html()
-nav_segment = NavExtractor(html).extract_info()
-print(nav_segment)
-nav_selenium.goto_next_page()
-html_new = nav_selenium.get_html()
-nav_segment = NavExtractor(html_new).extract_info()
-print(nav_segment)
-nav_selenium.goto_next_page()
-html_new = nav_selenium.get_html()
-nav_segment = NavExtractor(html_new).extract_info()
-print(nav_segment)
-nav_selenium.goto_next_page()
-html_new = nav_selenium.get_html()
-nav_segment = NavExtractor(html_new).extract_info()
-print(nav_segment)
 nav_selenium.quit()

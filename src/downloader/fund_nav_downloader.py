@@ -1,13 +1,13 @@
 """
 TODO: 
 - [X] Remove table if exist
-- [ ] Refactor: combine initialize & nav_segment_generator -> Nav Batch Generator
-- [ ] Refactor: seperate isin,company extraction 
-    -> 1. [ ] build pipe (load isin & company here)
-    -> 2. [ ] run pipe (delete table at exception)
+- [X] Refactor: combine initialize & nav_segment_generator -> Nav Batch Generator
+- [X] Refactor: seperate isin, company extraction 
+    -> 1. [X] build pipe (load isin & company here)
+    -> 2. [X] run pipe (delete table at exception)
 - [ ] Make sure chromedriver is deleted when KeyboradException occur
 """
-from src.page_extractor.fund_nav_extractor import NavView, NavExtractor
+from src.page_extractor.fund_nav_extractor import NavView, NavExtractor, IterationFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
 import pandas as pd
 from functools import partial
@@ -23,21 +23,17 @@ import random
 
 VERBOSE = False
 TQDM_VERBOSE = True
+
+class PipeBuildFailError(BaseException):
+    pass
+
 @ray.remote
 class _FundNavExtractActor:
     def __init__(self, pending_time=0):
         self._nav_selenium = NavView()
         self._pending_time = pending_time
         self._first_try = True
-    def quit(self):
-        self._nav_selenium.quit()
-
-    def delete_table(self, company, isin):
-        if os.path.exists(self.__get_table_path(company, isin)):
-            if VERBOSE:
-                print(f'delete {self.__get_table_path(company, isin)}')
-            os.remove(self.__get_table_path(company, isin))
-
+    
     def request(self, input_tuple):
         try:
             if self._first_try:
@@ -45,52 +41,50 @@ class _FundNavExtractActor:
                 self._first_try = False
             gc.collect()
             fund, url = input_tuple
+            end_pipe = self._build_pipe(fund, url)
+            _ = list(end_pipe)
+            return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
+        except PipeBuildFailError as e:
+            result = f"NAV DOWNLOAD FAILED with PipeBuildFailError:\n{fund}\nURL:\n{url}"
+            print(result)
+            return result
+        except IterationFailError:
+            result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund}\nURL:\n{url}"
+            print(result)
+            print(traceback.format_exc())
+            self._delete_h5(company, isin)
+            self._nav_selenium.driver.refresh()
+            return result
+        except BaseException as e:
+            print(traceback.format_exc())
+            self.quit()
+            raise e
+
+    def quit(self):
+        self._nav_selenium.quit()
+
+    def _build_pipe(self, fund, url):
+        try:
             info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
             isin = info_extractor.isin
             company = info_extractor.company
-            self.delete_table(company, isin)
-            self._nav_selenium.initialize(url)
-            nav_segment_gen = self._nav_segment_generator()
+            self._delete_h5(company, isin)
+            nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
+            h5_pipe = map(
+                partial(self._save_to_h5, isin=isin, company=company),
+                nav_gen
+            )
             if TQDM_VERBOSE:
-                for item in tqdm.tqdm(
-                    map(
-                        partial(self._save_to_h5, isin=isin, company=company),
-                        nav_segment_gen
-                    ),
-                    desc=fund,
-                    total=self._nav_selenium.max_page_count):
-                    if VERBOSE:
-                        print(f"Finish Saving Data of {item} of {isin} of {company}")
-                    else:
-                        continue
+                end_pipe = tqdm.tqdm(
+                        h5_pipe,
+                        desc=fund,
+                        total=batch_count)
             else:
-                _ = list(map(
-                        partial(self._save_to_h5, isin=isin, company=company),
-                        nav_segment_gen
-                    ))
-            self._nav_selenium.driver.refresh()
-            return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
-        except BaseException:
-            result = f"NAV DOWNLOAD FAILED:\n{fund}\nURL:\n{url}"
-            print(result)
+                end_pipe = h5_pipe
+            return end_pipe
+        except:
             print(traceback.format_exc())
-            self._nav_selenium.driver.refresh()
-            try:
-                self.delete_table(company, isin)
-            except:
-                pass
-            return result
-        
-
-    def _nav_segment_generator(self):
-        for i in range(self._nav_selenium.max_page_count):
-            nav_segment = NavExtractor(self._nav_selenium.get_html()).extract_info()
-            yield nav_segment
-            try:
-                assert self._nav_selenium.has_next_page()
-                self._nav_selenium.goto_next_page()
-            except AssertionError:
-                break
+            raise PipeBuildFailError()
 
     def _save_to_h5(self, nav_segment, isin='default', company='default'):
         table = pd.DataFrame(nav_segment)
@@ -110,6 +104,11 @@ class _FundNavExtractActor:
     def __get_table_folder(self, company):
         return f'data/nav/{company}'
     
+    def _delete_h5(self, company, isin):
+        if os.path.exists(self.__get_table_path(company, isin)):
+            if VERBOSE:
+                print(f'delete {self.__get_table_path(company, isin)}')
+            os.remove(self.__get_table_path(company, isin))
 
 class ParallelFundNavDownloader:
     def __init__(self, parallel_cnt):

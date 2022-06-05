@@ -5,7 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import gc
 import pprint
-
+import traceback
 
 class _LastPageExtractor(HtmlBase):
     def extract_info(self):
@@ -16,13 +16,48 @@ class _LastPageExtractor(HtmlBase):
         page_count = int(page_buttoms[0].parent.parent.findChildren()[-1].text)
         return page_count
 
+class IterationFailError(BaseException):
+    pass
 
 class NavView(SeleniumBase):
     def __init__(self, verbose=False):
         super().__init__()
         self.__verbose = verbose
 
-    def initialize(self, url):
+    def build_nav_batch_generator(self, url, batch_size=10):
+        self._initialize(url)
+        batch_count = int(self.max_page_count * (10. / batch_size))
+        return self._nav_batch_generator(batch_size=batch_size), batch_count
+    def _nav_batch_generator(self, batch_size=10):
+        """
+        Args:
+            - url: the url of the nav page
+            - batch_size: number of nav per page
+        """
+        try:
+            result = []
+            for date, nav in self._nav_generator():
+                result.append((date, nav))
+                if len(result) == batch_size:
+                    yield result
+                    result = []
+                    gc.collect()
+        except:
+            print(traceback.format_exc())
+            raise IterationFailError()
+                
+    def _nav_generator(self):
+        self.driver.refresh()
+        for i in range(self.max_page_count):
+            nav_segment = NavExtractor(self.get_html()).extract_info()
+            for date, nav in nav_segment:
+                yield date, nav
+            if self._has_next_page():
+                self._goto_next_page()
+            else:
+                break
+
+    def _initialize(self, url):
         self.url = url
         self.load_url(url)
         self.current_page_index = 1
@@ -33,6 +68,7 @@ class NavView(SeleniumBase):
         self.max_page_count = _LastPageExtractor(
             self.get_html()).extract_info()
         gc.collect()
+        
 
     def show_current_states(self):
         pprint.pprint({
@@ -42,16 +78,16 @@ class NavView(SeleniumBase):
             'current_page': self.current_page_index
         })
 
-    def has_next_page(self):
+    def _has_next_page(self):
         return self.current_page_index < self.max_page_count
 
-    def goto_next_page(self):
+    def _goto_next_page(self):
         assert self.current_page_index < self.max_page_count
-        self.make_action()
+        self._make_action()
         self.current_page_index += 1
-        self.wait_state_change(self.current_page_index)
+        self._wait_state_change(self.current_page_index)
 
-    def make_action(self):
+    def _make_action(self):
         buttom_name = '下一頁'
         buttom = WebDriverWait(self.driver, 20).until(
             EC.element_to_be_clickable((By.LINK_TEXT, buttom_name))
@@ -67,7 +103,7 @@ class NavView(SeleniumBase):
         """
         self.driver.execute_script(java_script)
 
-    def wait_state_change(self, page_index):
+    def _wait_state_change(self, page_index):
         xpath_selector = f"//a[@class='{self.current_page_buttom_class_name}']"
         WebDriverWait(self.driver, 20).until(
             EC.text_to_be_present_in_element((

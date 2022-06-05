@@ -100,11 +100,13 @@ class _FundNavExtractActor:
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] {download_mode} pipe built')
             end_pipe = self._build_pipe(fund, url, download_mode=download_mode)
-            _ = list(end_pipe)
+            agg_result = list(end_pipe)
             if VERBOSE:
                 print(
                     f'[request {input_tuple[0]}] {download_mode} download finish')
-            if download_mode == 'partial':
+            if download_mode == 'partial' and len(agg_result) > 0:
+                if VERBOSE: 
+                    print(f'[request {input_tuple[0]}] len(agg_result): {len(agg_result)}')
                 self._update_h5()
                 if VERBOSE:
                     print(f'[request {input_tuple[0]}] h5 updated')

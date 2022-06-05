@@ -27,12 +27,41 @@ import traceback
 import gc
 import time
 import random
+import copy
 
 VERBOSE = True
 TQDM_VERBOSE = True
 
 class PipeBuildFailError(BaseException):
     pass
+
+class ExtractorBuildFailError(BaseException):
+    pass
+
+class _TablePathExtractor(object):
+    def __init__(self, url):
+        try:
+            info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
+        except:
+            print(traceback.format_exc())
+            raise ExtractorBuildFailError()
+        self._isin = info_extractor.isin
+        self._company = info_extractor.company
+        self.dir_name = 'nav'
+
+    @property
+    def table_path(self):
+        return f'{self.folder_path}/{self._isin}.h5'
+
+    @property
+    def folder_path(self):
+        return f'data/{self.dir_name}/{self._company}'
+
+    @property
+    def tmp(self):
+        new_path_extractor = copy.deepcopy(self)
+        new_path_extractor.dir_name = 'nav_tmp'
+        return new_path_extractor
 
 @ray.remote
 class _FundNavExtractActor:
@@ -48,29 +77,21 @@ class _FundNavExtractActor:
                 self._first_try = False
             gc.collect()
             fund, url = input_tuple
+            self._path_extractor = _TablePathExtractor(url)
             end_pipe = self._build_pipe(fund, url)
             _ = list(end_pipe)
             return f"NAV DOWNLOAD OF {fund}:{self.__get_table_path(company, isin)} COMPLETE"
-        except PipeBuildFailError as e:
-            result = f"NAV DOWNLOAD FAILED with PipeBuildFailError:\n{fund}\nURL:\n{url}"
+        except (PipeBuildFailError, ExtractorBuildFailError) as e:
+            result = f"NAV DOWNLOAD FAILED with {str(e)}:\n{fund}\nURL:\n{url}"
             print(result)
             return result
         except IterationFailError:
             result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund}\nURL:\n{url}"
             print(result)
             print(traceback.format_exc())
-            self._delete_h5(company, isin)
+            self._delete_h5()
             self._nav_selenium.driver.refresh()
             return result
-        except KeyboardInterrupt as e:
-            result = f"NAV DOWNLOAD FAILED with KeyboardInterrupt:\n{fund}\nURL:\n{url}"
-            print(result)
-            print(traceback.format_exc())
-            self._delete_h5(company, isin)
-            print('h5 Deleted')
-            self.quit()
-            print('Selenium quit')
-            raise e
         except BaseException as e:
             print(traceback.format_exc())
             self.quit()
@@ -79,22 +100,19 @@ class _FundNavExtractActor:
     def quit(self):
         self._nav_selenium.quit()
 
-    def _nav_filter(self, nav_gen, isin=None, company=None):
+    def _nav_filter(self, nav_gen):
         for date, nav in nav_gen:
-            if len(pd.read_hdf(self.__get_table_path(company, isin), 'nav', where=f'date=="{date}"')) >= 1:
+            if len(pd.read_hdf(self._path_extractor.table_path, 'nav', where=f'date=="{date}"')) >= 1:
                 break
             else:
                 yield date, nav
 
     def _build_pipe(self, fund, url):
         try:
-            info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
-            isin = info_extractor.isin
-            company = info_extractor.company
             # If the table does not exist, do full download
             nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
             h5_pipe = map(
-                partial(self._save_to_h5, isin=isin, company=company),
+                self._save_to_h5,
                 nav_gen
             )
             if TQDM_VERBOSE:
@@ -109,34 +127,24 @@ class _FundNavExtractActor:
             print(traceback.format_exc())
             raise PipeBuildFailError()
 
-    def _save_to_h5(self, nav_segment, isin=None, company=None):
-        assert isin is not None 
-        assert company is not None
+    def _save_to_h5(self, nav_segment):
         if VERBOSE:
-            print(f'isin: {isin}; company: {company}')
             pprint.pprint(nav_segment)
         table = pd.DataFrame(nav_segment)
         table.columns = ['date', 'nav']
         if VERBOSE:
             pprint.pprint(table)
-        directory = self.__get_table_folder(company)
+        directory = self._path_extractor.folder_path
         if not os.path.exists(directory):
             os.makedirs(directory)
-        table.to_hdf(self.__get_table_path(company, isin), 'nav', append=True, format='table', data_columns=table.columns)
+        table.to_hdf(self._path_extractor.table_path, 'nav', append=True, format='table', data_columns=table.columns)
         return str(table['date'].values[-1])
     
-   
-    def __get_table_path(self, company, isin):
-        return f'{self.__get_table_folder(company)}/{isin}.h5'
-
-    def __get_table_folder(self, company):
-        return f'data/nav/{company}'
-    
-    def _delete_h5(self, company, isin):
-        if os.path.exists(self.__get_table_path(company, isin)):
+    def _delete_h5(self):
+        if os.path.exists(self._path_extractor.table_path):
             if VERBOSE:
-                print(f'delete {self.__get_table_path(company, isin)}')
-            os.remove(self.__get_table_path(company, isin))
+                print(f'delete {self._path_extractor.table_path}')
+            os.remove(self._path_extractor.table_path)
 
 class ParallelFundNavDownloader:
     def __init__(self, parallel_cnt):

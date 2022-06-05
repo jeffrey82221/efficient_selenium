@@ -29,6 +29,7 @@ import time
 import random
 import copy
 import shutil
+from datetime import datetime
 
 VERBOSE = False
 TQDM_VERBOSE = True
@@ -123,12 +124,18 @@ class _FundNavExtractActor:
             else:
                 yield date, nav
 
+    def _estimate_batch_count(self):
+        last_date_str = pd.read_hdf(self._path_extractor.table_path, 'nav', where='index=0').iloc[0].date
+        last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
+        return int((datetime.now() - last_date).days/10 + 1)
+
     def _build_pipe(self, fund, url, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
         try:
             # If the table does not exist, do full download
             if download_mode == 'partial':
-                nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url, nav_filter=self._nav_filter)
+                nav_gen, _ = self._nav_selenium.build_nav_batch_generator(url, nav_filter=self._nav_filter)
+                batch_count = self._estimate_batch_count()
             else: 
                 # full download
                 nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)

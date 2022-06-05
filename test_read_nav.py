@@ -1,7 +1,9 @@
 import pandas as pd
 import os
-table = pd.read_hdf('data/nav/施羅德投資管理（盧森堡）有限公司/LU0091253459.h5', 'nav')
-print(table)
+from datetime import datetime
+last_date_str = pd.read_hdf('data/nav/施羅德投資管理（盧森堡）有限公司/LU0091253459.h5', 'nav', where='index=0').iloc[0].date
+last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
+print(int((datetime.now() - last_date).days/10 + 1))
 
 # Step 1: concate old navs to tmp h5 file
 # original_table = pd.read_hdf('data/nav/施羅德投資管理（盧森堡）有限公司/LU0091253459.h5', 'nav')

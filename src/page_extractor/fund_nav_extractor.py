@@ -26,8 +26,14 @@ class NavView(SeleniumBase):
 
     def build_nav_batch_generator(self, url, batch_size=10):
         self._initialize(url)
-        batch_count = int(self.max_page_count * (10. / batch_size))
-        return self._nav_batch_generator(batch_size=batch_size), batch_count
+        estimated_batch_count = int(self.max_page_count * (10. / batch_size))
+        return self._nav_batch_generator(batch_size=batch_size), estimated_batch_count
+    
+    def build_nav_generator(self, url):
+        self._initialize(url)
+        estimated_count = self.max_page_count * 10
+        return self._nav_generator(), estimated_count
+
     def _nav_batch_generator(self, batch_size=10):
         """
         Args:
@@ -42,6 +48,8 @@ class NavView(SeleniumBase):
                     yield result
                     result = []
                     gc.collect()
+        except KeyboardInterrupt as e:
+            raise e
         except:
             print(traceback.format_exc())
             raise IterationFailError()

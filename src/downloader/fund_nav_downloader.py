@@ -21,7 +21,7 @@ import gc
 import time
 import random
 
-VERBOSE = False
+VERBOSE = True
 TQDM_VERBOSE = True
 
 class PipeBuildFailError(BaseException):
@@ -33,6 +33,7 @@ class _FundNavExtractActor:
         self._nav_selenium = NavView()
         self._pending_time = pending_time
         self._first_try = True
+    
     
     def request(self, input_tuple):
         try:
@@ -55,6 +56,15 @@ class _FundNavExtractActor:
             self._delete_h5(company, isin)
             self._nav_selenium.driver.refresh()
             return result
+        except KeyboardInterrupt as e:
+            result = f"NAV DOWNLOAD FAILED with KeyboardInterrupt:\n{fund}\nURL:\n{url}"
+            print(result)
+            print(traceback.format_exc())
+            self._delete_h5(company, isin)
+            print('h5 Deleted')
+            self.quit()
+            print('Selenium quit')
+            raise e
         except BaseException as e:
             print(traceback.format_exc())
             self.quit()
@@ -68,36 +78,51 @@ class _FundNavExtractActor:
             info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
             isin = info_extractor.isin
             company = info_extractor.company
-            self._delete_h5(company, isin)
-            nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
-            h5_pipe = map(
-                partial(self._save_to_h5, isin=isin, company=company),
-                nav_gen
-            )
-            if TQDM_VERBOSE:
-                end_pipe = tqdm.tqdm(
-                        h5_pipe,
-                        desc=fund,
-                        total=batch_count)
+            if os.path.exists(self.__get_table_path(company, isin)):
+                # If the table already exist, do only partial download
+                nav_gen, count = self._nav_selenium.build_nav_generator(url)
+                # Step 1: nav_gen needs to be path through a date existence checker (stop once the date already exists)
+                # Step 2: to turn-on the tmp mode to allow __get_table_path & __get_folder_path to located at nav_tmp/
+                # Step 3: build the same pipe
+                # Step 4: run the pipe 
+                # Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
+                # Step 6: Outside this function, allow combination of tmp and original 
             else:
-                end_pipe = h5_pipe
+                # If the table does not exist, do full download
+                nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
+                h5_pipe = map(
+                    partial(self._save_to_h5, isin=isin, company=company),
+                    nav_gen
+                )
+                if TQDM_VERBOSE:
+                    end_pipe = tqdm.tqdm(
+                            h5_pipe,
+                            desc=fund,
+                            total=batch_count)
+                else:
+                    end_pipe = h5_pipe
             return end_pipe
         except:
             print(traceback.format_exc())
             raise PipeBuildFailError()
 
-    def _save_to_h5(self, nav_segment, isin='default', company='default'):
-        table = pd.DataFrame(nav_segment)
+    def _save_to_h5(self, nav_segment, isin=None, company=None):
+        assert isin is not None 
+        assert company is not None
         if VERBOSE:
             print(f'isin: {isin}; company: {company}')
-            pprint.pprint(table)
+            pprint.pprint(nav_segment)
+        table = pd.DataFrame(nav_segment)
         table.columns = ['date', 'nav']
+        if VERBOSE:
+            pprint.pprint(table)
         directory = self.__get_table_folder(company)
         if not os.path.exists(directory):
             os.makedirs(directory)
-        table.to_hdf(self.__get_table_path(company, isin), 'nav', append=True)
+        table.to_hdf(self.__get_table_path(company, isin), 'nav', append=True, format='table', data_columns=table.columns)
         return str(table['date'].values[-1])
     
+   
     def __get_table_path(self, company, isin):
         return f'{self.__get_table_folder(company)}/{isin}.h5'
 
@@ -121,11 +146,13 @@ class ParallelFundNavDownloader:
             return self._pool.map(lambda actor, input_tuple: actor.request.remote(input_tuple),
                                 fund_link_generator)
         except:
+            print('start quiting actors')
             self.quite()
 
     def quit(self):
         for actor in self._actors:
             try:
                 actor.quit.remote()
+                print(f'quit actor: {actor}')
             except:
                 print(str(actor), 'selenium driver already quit')

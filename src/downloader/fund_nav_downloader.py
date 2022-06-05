@@ -41,7 +41,6 @@ class _FundNavExtractActor:
         self._pending_time = pending_time
         self._first_try = True
     
-    
     def request(self, input_tuple):
         try:
             if self._first_try:
@@ -79,6 +78,13 @@ class _FundNavExtractActor:
 
     def quit(self):
         self._nav_selenium.quit()
+
+    def _nav_filter(self, nav_gen, isin=None, company=None):
+        for date, nav in nav_gen:
+            if len(pd.read_hdf(self.__get_table_path(company, isin), 'nav', where=f'date=="{date}"')) >= 1:
+                break
+            else:
+                yield date, nav
 
     def _build_pipe(self, fund, url):
         try:

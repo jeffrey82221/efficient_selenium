@@ -22,7 +22,7 @@ for fund_name in tqdm.tqdm(
     print(fund_name)
 fund_nav_downloader.quit()
 
-fund_info_downloader = ParallelFundInfoDownloader(20)
+fund_info_downloader = ParallelFundInfoDownloader(30)
 for fund_name, info in tqdm.tqdm(
         fund_info_downloader.map(fund_links), total=link_downloader.fund_count):
     new = fund_name

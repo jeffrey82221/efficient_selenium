@@ -113,7 +113,7 @@ class _FundNavExtractActor:
             result = f"NAV DOWNLOAD FAILED with {str(e)}:\n{fund}\nURL:\n{url}"
             print(result)
             return result
-        except IterationFailError:
+        except (IterationFailError, KeyboardInterrupt):
             # KeyboardInterupt goes here
             result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund}\nURL:\n{url}"
             print(result)

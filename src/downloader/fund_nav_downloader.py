@@ -6,6 +6,13 @@ TODO:
     -> 1. [X] build pipe (load isin & company here)
     -> 2. [X] run pipe (delete table at exception)
 - [ ] Make sure chromedriver is deleted when KeyboradException occur
+- [ ] Allow partial download if the file already exist
+    - [ ] Step 1: nav_gen needs to be path through a date existence checker (stop once the date already exists)
+    - [ ] Step 2: to turn-on the tmp mode to allow __get_table_path & __get_folder_path to located at nav_tmp/
+    - [ ] Step 3: build the same pipe
+    - [ ] Step 4: run the pipe 
+    - [ ] Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
+    - [ ] Step 6: Outside this function, allow combination of tmp and original 
 """
 from src.page_extractor.fund_nav_extractor import NavView, NavExtractor, IterationFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
@@ -78,29 +85,19 @@ class _FundNavExtractActor:
             info_extractor = FundInfoExtractor(FundDocumentPage().get_html(url))
             isin = info_extractor.isin
             company = info_extractor.company
-            if os.path.exists(self.__get_table_path(company, isin)):
-                # If the table already exist, do only partial download
-                nav_gen, count = self._nav_selenium.build_nav_generator(url)
-                # Step 1: nav_gen needs to be path through a date existence checker (stop once the date already exists)
-                # Step 2: to turn-on the tmp mode to allow __get_table_path & __get_folder_path to located at nav_tmp/
-                # Step 3: build the same pipe
-                # Step 4: run the pipe 
-                # Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
-                # Step 6: Outside this function, allow combination of tmp and original 
+            # If the table does not exist, do full download
+            nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
+            h5_pipe = map(
+                partial(self._save_to_h5, isin=isin, company=company),
+                nav_gen
+            )
+            if TQDM_VERBOSE:
+                end_pipe = tqdm.tqdm(
+                        h5_pipe,
+                        desc=fund,
+                        total=batch_count)
             else:
-                # If the table does not exist, do full download
-                nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(url)
-                h5_pipe = map(
-                    partial(self._save_to_h5, isin=isin, company=company),
-                    nav_gen
-                )
-                if TQDM_VERBOSE:
-                    end_pipe = tqdm.tqdm(
-                            h5_pipe,
-                            desc=fund,
-                            total=batch_count)
-                else:
-                    end_pipe = h5_pipe
+                end_pipe = h5_pipe
             return end_pipe
         except:
             print(traceback.format_exc())

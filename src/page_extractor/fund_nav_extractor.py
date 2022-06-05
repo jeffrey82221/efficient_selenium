@@ -24,17 +24,17 @@ class NavView(SeleniumBase):
         super().__init__()
         self.__verbose = verbose
 
-    def build_nav_batch_generator(self, url, batch_size=10):
+    def build_nav_batch_generator(self, url, batch_size=10, nav_filter = lambda x: x):
         self._initialize(url)
         estimated_batch_count = int(self.max_page_count * (10. / batch_size))
-        return self._nav_batch_generator(batch_size=batch_size), estimated_batch_count
+        return self._nav_batch_generator(nav_filter(self._nav_generator()), batch_size=batch_size), estimated_batch_count
     
     def build_nav_generator(self, url):
         self._initialize(url)
         estimated_count = self.max_page_count * 10
         return self._nav_generator(), estimated_count
 
-    def _nav_batch_generator(self, batch_size=10):
+    def _nav_batch_generator(self, nav_generator, batch_size=10):
         """
         Args:
             - url: the url of the nav page
@@ -42,7 +42,7 @@ class NavView(SeleniumBase):
         """
         try:
             result = []
-            for date, nav in self._nav_generator():
+            for date, nav in nav_generator:
                 result.append((date, nav))
                 if len(result) == batch_size:
                     yield result

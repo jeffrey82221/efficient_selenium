@@ -11,6 +11,7 @@ class FundDocumentPage(HttpBase):
         else:
             return url + '/document/'
 
+
 class FundInfoExtractor(HtmlBase):
     def extract_info(self):
         """

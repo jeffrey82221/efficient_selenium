@@ -7,6 +7,7 @@ import gc
 import pprint
 import traceback
 
+
 class _LastPageExtractor(HtmlBase):
     def extract_info(self):
         soup = self.soup
@@ -16,19 +17,23 @@ class _LastPageExtractor(HtmlBase):
         page_count = int(page_buttoms[0].parent.parent.findChildren()[-1].text)
         return page_count
 
+
 class IterationFailError(BaseException):
     pass
+
 
 class NavView(SeleniumBase):
     def __init__(self, verbose=False):
         super().__init__()
         self.__verbose = verbose
 
-    def build_nav_batch_generator(self, url, batch_size=10, nav_filter = lambda x: x):
+    def build_nav_batch_generator(
+            self, url, batch_size=10, nav_filter=lambda x: x):
         self._initialize(url)
         estimated_batch_count = int(self.max_page_count * (10. / batch_size))
-        return self._nav_batch_generator(nav_filter(self._nav_generator()), batch_size=batch_size), estimated_batch_count
-    
+        return self._nav_batch_generator(nav_filter(
+            self._nav_generator()), batch_size=batch_size), estimated_batch_count
+
     def build_nav_generator(self, url):
         self._initialize(url)
         estimated_count = self.max_page_count * 10
@@ -50,10 +55,10 @@ class NavView(SeleniumBase):
                     gc.collect()
         except KeyboardInterrupt as e:
             raise e
-        except:
+        except BaseException:
             print(traceback.format_exc())
             raise IterationFailError()
-                
+
     def _nav_generator(self):
         self.driver.refresh()
         for i in range(self.max_page_count):
@@ -76,7 +81,6 @@ class NavView(SeleniumBase):
         self.max_page_count = _LastPageExtractor(
             self.get_html()).extract_info()
         gc.collect()
-        
 
     def show_current_states(self):
         pprint.pprint({

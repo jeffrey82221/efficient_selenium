@@ -27,7 +27,7 @@ class SeleniumBase(object):
             self.driver = webdriver.Chrome(
                 ChromeDriverManager().install(),
                 options=chrome_options)
-        
+
     def load_url(self, url):
         self.driver.get(url)
 

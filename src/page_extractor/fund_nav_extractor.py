@@ -60,15 +60,18 @@ class NavView(SeleniumBase):
             raise IterationFailError()
 
     def _nav_generator(self):
-        self.driver.refresh()
-        for i in range(self.max_page_count):
-            nav_segment = NavExtractor(self.get_html()).extract_info()
-            for date, nav in nav_segment:
-                yield date, nav
-            if self._has_next_page():
-                self._goto_next_page()
-            else:
-                break
+        try:
+            for i in range(self.max_page_count):
+                nav_segment = NavExtractor(self.get_html()).extract_info()
+                for date, nav in nav_segment:
+                    yield date, nav
+                if self._has_next_page():
+                    self._goto_next_page()
+                else:
+                    break
+        except BaseException as e:
+            print(f'[_nav_generator] error happended for url:{self.url}')
+            raise e
 
     def _initialize(self, url):
         self.url = url
@@ -129,11 +132,14 @@ class NavExtractor(HtmlBase):
     def extract_info(self):
         soup = self.soup
         tables = soup.find_all('table')
-        assert len(tables) == 2
+        if len(tables) != 2:
+            print('[NavExtractor: extract_info] len(tables):', len(tables), '!=2')
+            raise AssertionError()
         nav_table = tables[1]
         rows = nav_table.find_all('tr')[1:]
         date_n_navs = list(map(self.extract_date_n_nav_from_row, rows))
         return date_n_navs
+        
 
     def extract_date_n_nav_from_row(self, row):
         cells = row.find_all('td')

@@ -69,8 +69,11 @@ class NavView(SeleniumBase):
                     self._goto_next_page()
                 else:
                     break
+        except GeneratorExit as e:
+            raise e
         except BaseException as e:
             print(f'[_nav_generator] error happended for url:{self.url}')
+            print(traceback.format_exc())
             raise e
 
     def _initialize(self, url):

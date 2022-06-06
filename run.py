@@ -18,7 +18,7 @@ print('fund_links Loaded')
 
 fund_nav_downloader = ParallelFundNavDownloader(30)
 for fund_name in tqdm.tqdm(
-        fund_nav_downloader.map(fund_links), total=link_downloader.fund_count):
+        fund_nav_downloader.map(fund_links[::-1]), total=link_downloader.fund_count):
     print(fund_name)
 fund_nav_downloader.quit()
 """

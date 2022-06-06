@@ -229,6 +229,11 @@ class _FundNavExtractActor:
 
 
 class ParallelFundNavDownloader:
+    """
+    TODO:
+    - [ ] Filter the fund_link_generator to ignore re-download at the same day.
+    - [ ] Do not use SeleniumBase if the re-download time is later than 5 days ago. 
+    """
     def __init__(self, parallel_cnt):
         self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20)
                         for i in range(parallel_cnt)]

@@ -16,7 +16,7 @@ except BaseException:
         pickle.dump(fund_links, f)
 print('fund_links Loaded')
 
-fund_nav_downloader = ParallelFundNavDownloader(100)
+fund_nav_downloader = ParallelFundNavDownloader(30)
 for fund_name in tqdm.tqdm(
         fund_nav_downloader.map(fund_links), total=link_downloader.fund_count):
     print(fund_name)

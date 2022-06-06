@@ -21,6 +21,7 @@ class SeleniumBase(object):
             "images": 2}
         chrome_options.experimental_options["prefs"] = chrome_prefs
         try:
+            # On Mac M1:
             self.driver = webdriver.Chrome(
                 'chromedriver', options=chrome_options)
         except BaseException:

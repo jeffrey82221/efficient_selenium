@@ -21,24 +21,26 @@ class _LastPageExtractor(HtmlBase):
 class IterationFailError(BaseException):
     pass
 
-
+# TODO: Refactor 
+# 1. [ ] extract @common to fund_nav_downloader 
+# 2. [ ] In HttpBase version of NavView, build its own version of method labeled with @http
 class NavView(SeleniumBase):
-    def __init__(self, verbose=False):
-        super().__init__()
-        self.__verbose = verbose
 
+    # @common
     def build_nav_batch_generator(
             self, url, batch_size=10, nav_filter=lambda x: x):
         self._initialize(url)
         estimated_batch_count = int(self.max_page_count * (10. / batch_size))
         return self._nav_batch_generator(nav_filter(
             self._nav_generator()), batch_size=batch_size), estimated_batch_count
-
+    
+    # @common
     def build_nav_generator(self, url):
         self._initialize(url)
         estimated_count = self.max_page_count * 10
         return self._nav_generator(), estimated_count
 
+    # @common
     def _nav_batch_generator(self, nav_generator, batch_size=10):
         """
         Args:
@@ -59,6 +61,7 @@ class NavView(SeleniumBase):
             print(traceback.format_exc())
             raise IterationFailError()
 
+    # @selenium + @http: TODO: [ ] allow get_url of the child of HttpBase to have load_url where self._url is set and used in get_url
     def _nav_generator(self):
         try:
             for i in range(self.max_page_count):
@@ -76,6 +79,8 @@ class NavView(SeleniumBase):
             print(traceback.format_exc())
             raise e
 
+    # @selenium + @http: TODO: [ ] The HttpBase version Class must have its own _initialize, 
+    # where self.current_page_index / self.current_page_buttom_class_name can be ignored. 
     def _initialize(self, url):
         self.url = url
         self.load_url(url)
@@ -88,23 +93,19 @@ class NavView(SeleniumBase):
             self.get_html()).extract_info()
         gc.collect()
 
-    def show_current_states(self):
-        pprint.pprint({
-            'url': self.url,
-            'max_page_count': self.max_page_count,
-            'current_page_buttom_class_name': self.current_page_buttom_class_name,
-            'current_page': self.current_page_index
-        })
 
+    # @selenium
     def _has_next_page(self):
         return self.current_page_index < self.max_page_count
 
+    # @selenium
     def _goto_next_page(self):
         assert self.current_page_index < self.max_page_count
         self._make_action()
         self.current_page_index += 1
         self._wait_state_change(self.current_page_index)
 
+    # @selenium
     def _make_action(self):
         buttom_name = '下一頁'
         buttom = WebDriverWait(self.driver, 20).until(
@@ -121,6 +122,7 @@ class NavView(SeleniumBase):
         """
         self.driver.execute_script(java_script)
 
+    # @selenium
     def _wait_state_change(self, page_index):
         xpath_selector = f"//a[@class='{self.current_page_buttom_class_name}']"
         WebDriverWait(self.driver, 20).until(

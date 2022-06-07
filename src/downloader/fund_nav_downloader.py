@@ -139,12 +139,12 @@ class _FundNavExtractActor:
         try:
             # If the table does not exist, do full download
             if download_mode == 'partial':
-                nav_gen, _ = self.nav_view.build_nav_batch_generator(
+                nav_gen, _ = self._build_nav_batch_generator(
                     url, nav_filter=self._nav_filter)
                 batch_count = self._estimate_batch_count()
             else:
                 # full download
-                nav_gen, batch_count = self.nav_view.build_nav_batch_generator(
+                nav_gen, batch_count = self._build_nav_batch_generator(
                     url)
             h5_pipe = map(
                 partial(self._save_to_h5, download_mode=download_mode),
@@ -161,6 +161,41 @@ class _FundNavExtractActor:
         except BaseException:
             print(traceback.format_exc())
             raise PipeBuildFailError()
+
+    # @common
+    def _build_nav_batch_generator(
+            self, url, batch_size=10, nav_filter=lambda x: x):
+        self.nav_view.initialize(url)
+        estimated_batch_count = int(self.nav_view.max_page_count * (10. / batch_size))
+        return self._nav_batch_generator(nav_filter(
+            self.nav_view.nav_generator()), batch_size=batch_size), estimated_batch_count
+
+    # @common
+    def build_nav_generator(self, url):
+        self.nav_view.initialize(url)
+        estimated_count = self.nav_view.max_page_count * 10
+        return self.nav_view.nav_generator(), estimated_count
+
+    # @common
+    def _nav_batch_generator(self, nav_generator, batch_size=10):
+        """
+        Args:
+            - url: the url of the nav page
+            - batch_size: number of nav per page
+        """
+        try:
+            result = []
+            for date, nav in nav_generator:
+                result.append((date, nav))
+                if len(result) == batch_size:
+                    yield result
+                    result = []
+                    gc.collect()
+        except KeyboardInterrupt as e:
+            raise e
+        except BaseException:
+            print(traceback.format_exc())
+            raise IterationFailError()
 
     # @common
     def _nav_filter(self, nav_gen):

@@ -22,47 +22,12 @@ class IterationFailError(BaseException):
     pass
 
 # TODO: Refactor 
-# 1. [ ] extract @common to fund_nav_downloader 
+# 1. [X] extract @common in NavView(SeleniumBase) to fund_nav_downloader 
 # 2. [ ] In HttpBase version of NavView, build its own version of method labeled with @http
 class NavView(SeleniumBase):
 
-    # @common
-    def build_nav_batch_generator(
-            self, url, batch_size=10, nav_filter=lambda x: x):
-        self._initialize(url)
-        estimated_batch_count = int(self.max_page_count * (10. / batch_size))
-        return self._nav_batch_generator(nav_filter(
-            self._nav_generator()), batch_size=batch_size), estimated_batch_count
-    
-    # @common
-    def build_nav_generator(self, url):
-        self._initialize(url)
-        estimated_count = self.max_page_count * 10
-        return self._nav_generator(), estimated_count
-
-    # @common
-    def _nav_batch_generator(self, nav_generator, batch_size=10):
-        """
-        Args:
-            - url: the url of the nav page
-            - batch_size: number of nav per page
-        """
-        try:
-            result = []
-            for date, nav in nav_generator:
-                result.append((date, nav))
-                if len(result) == batch_size:
-                    yield result
-                    result = []
-                    gc.collect()
-        except KeyboardInterrupt as e:
-            raise e
-        except BaseException:
-            print(traceback.format_exc())
-            raise IterationFailError()
-
     # @selenium + @http: TODO: [ ] allow get_url of the child of HttpBase to have load_url where self._url is set and used in get_url
-    def _nav_generator(self):
+    def nav_generator(self):
         try:
             for i in range(self.max_page_count):
                 nav_segment = NavExtractor(self.get_html()).extract_info()
@@ -81,7 +46,7 @@ class NavView(SeleniumBase):
 
     # @selenium + @http: TODO: [ ] The HttpBase version Class must have its own _initialize, 
     # where self.current_page_index / self.current_page_buttom_class_name can be ignored. 
-    def _initialize(self, url):
+    def initialize(self, url):
         self.url = url
         self.load_url(url)
         self.current_page_index = 1

@@ -14,7 +14,7 @@ TODO:
     - [X] Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
     - [X] Step 6: Outside this function, allow combination of tmp and original
 """
-from src.page_extractor.fund_nav_extractor import NavView, NavExtractor, IterationFailError
+from src.page_extractor.fund_nav_extractor import NavView, IterationFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
 import pandas as pd
 from functools import partial
@@ -76,11 +76,13 @@ class _TablePathExtractor(object):
 
 @ray.remote
 class _FundNavExtractActor:
-    def __init__(self, pending_time=0):
-        self._nav_selenium = NavView()
+    # @refactor TODO: [X] allow different self._nav_view (provided from outside the class)
+    def __init__(self, pending_time=0, nav_view_cls=None):
+        self.nav_view = nav_view_cls()
         self._pending_time = pending_time
         self._first_try = True
 
+    # @common
     def request(self, input_tuple):
         try:
             if VERBOSE:
@@ -121,27 +123,28 @@ class _FundNavExtractActor:
             print(result)
             print(traceback.format_exc())
             self._delete_h5(download_mode=download_mode)
-            self._nav_selenium.driver.refresh()
             return result
         except BaseException as e:
             print(traceback.format_exc())
             self.quit()
             raise e
 
+    # @selenium-base
     def quit(self):
-        self._nav_selenium.quit()
+        self.nav_view.quit()
 
+    # @common: TODO: [X] self._nav_selenium -> self._nav_view (allow SeleniumBase & HttpBase version)
     def _build_pipe(self, fund, url, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
         try:
             # If the table does not exist, do full download
             if download_mode == 'partial':
-                nav_gen, _ = self._nav_selenium.build_nav_batch_generator(
+                nav_gen, _ = self.nav_view.build_nav_batch_generator(
                     url, nav_filter=self._nav_filter)
                 batch_count = self._estimate_batch_count()
             else:
                 # full download
-                nav_gen, batch_count = self._nav_selenium.build_nav_batch_generator(
+                nav_gen, batch_count = self.nav_view.build_nav_batch_generator(
                     url)
             h5_pipe = map(
                 partial(self._save_to_h5, download_mode=download_mode),
@@ -159,6 +162,7 @@ class _FundNavExtractActor:
             print(traceback.format_exc())
             raise PipeBuildFailError()
 
+    # @common
     def _nav_filter(self, nav_gen):
         for date, nav in nav_gen:
             if len(pd.read_hdf(self._path_extractor.table_path,
@@ -167,6 +171,7 @@ class _FundNavExtractActor:
             else:
                 yield date, nav
 
+    # @common
     def _estimate_batch_count(self):
         last_date_str = pd.read_hdf(
             self._path_extractor.table_path,
@@ -175,6 +180,7 @@ class _FundNavExtractActor:
         last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
         return int((datetime.now() - last_date).days / 10 + 1)
 
+    # @common
     def _save_to_h5(self, nav_segment, download_mode='full'):
         try:
             assert download_mode == 'full' or download_mode == 'partial'
@@ -198,6 +204,7 @@ class _FundNavExtractActor:
             print(traceback.format_exc())
             raise IterationFailError()
 
+    # @common
     def _update_h5(self):
         try:
             tmp_path_extractor = self._path_extractor.tmp
@@ -216,6 +223,7 @@ class _FundNavExtractActor:
         # Step 3: remove the tmp h5 file in nav_tmp
         os.remove(tmp_path_extractor.table_path)
 
+    # @common
     def _delete_h5(self, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
         if download_mode == 'partial':
@@ -232,10 +240,18 @@ class ParallelFundNavDownloader:
     """
     TODO:
     - [ ] Filter the fund_link_generator to ignore re-download at the same day.
-    - [ ] Do not use SeleniumBase if the re-download time is later than 5 days ago. 
+    - [ ] Feature: Do not use SeleniumBase if the re-download time is later than 5 days ago. 
+        - [ ] Step 1: Build an HttpBase version FundNavExtractor, which only takes nav of the first page. 
+            - [ ] Refactor: 
+        - [ ] Step 2: in map ParallelFundNavDownloader, allow filtering of fund_links by whether or not 
+            the latest date is later than 5 days ago. 
+                If true, send the items into the HttpBase Actor, else 
+                send it to the SeleniumBase Actor.
+        - [ ] Step 3: allow merging the stream produced by Selenium Actor and that produced by HttpBase Actor
+    
     """
     def __init__(self, parallel_cnt):
-        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20)
+        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20, nav_view_cls=NavView)
                         for i in range(parallel_cnt)]
         self._pool = ActorPool(self._actors)
 
@@ -248,6 +264,7 @@ class ParallelFundNavDownloader:
             self.quite()
 
     def quit(self):
+        # only do quit on the SeleniumBase Actors
         for actor in self._actors:
             try:
                 actor.quit.remote()

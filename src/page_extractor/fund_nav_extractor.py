@@ -1,4 +1,5 @@
 from src.base.driver_base import SeleniumBase
+from src.base.http_base import HttpBase
 from src.base.html_base import HtmlBase
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -21,12 +22,43 @@ class _LastPageExtractor(HtmlBase):
 class IterationFailError(BaseException):
     pass
 
-# TODO: Refactor 
-# 1. [X] extract @common in NavView(SeleniumBase) to fund_nav_downloader 
-# 2. [ ] In HttpBase version of NavView, build its own version of method labeled with @http
-class NavView(SeleniumBase):
 
-    # @selenium + @http: TODO: [ ] allow get_url of the child of HttpBase to have load_url where self._url is set and used in get_url
+# TODO: Refactor # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# 1. [X] extract @common in NavView(SeleniumBase) to fund_nav_downloader 
+# 2. [X] In HttpBase version of NavView, build its own version of method labeled with @http
+#    - [X] allow get_url of the child of HttpBase to have load_url, 
+#            where self._url is set and used in get_url
+#    - [X] The HttpBase version Class must have its own _initialize, 
+#            where self.current_page_index / self.current_page_buttom_class_name can be ignored. 
+#    - [ ] TODO: Problem: HttpNavView produce html that has only one table! 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+class HttpNavView(HttpBase):
+    # @http
+    def nav_generator(self):
+        try:
+            nav_segment = NavExtractor(self.get_html()).extract_info()
+            for date, nav in nav_segment:
+                yield date, nav
+        except GeneratorExit as e:
+            raise e
+        except BaseException as e:
+            print(f'[_nav_generator] error happended for url:{self.get_url()}')
+            print(traceback.format_exc())
+            raise e
+
+    def get_url(self, *args, **kargs):
+        return self._url
+
+    # @http
+    def initialize(self, url):
+        self._load_url(url)
+        self.max_page_count = 1
+    
+    def _load_url(self, url):
+        self._url = url
+    
+class SeleniumNavView(SeleniumBase):
+    # @selenium
     def nav_generator(self):
         try:
             for i in range(self.max_page_count):
@@ -44,8 +76,7 @@ class NavView(SeleniumBase):
             print(traceback.format_exc())
             raise e
 
-    # @selenium + @http: TODO: [ ] The HttpBase version Class must have its own _initialize, 
-    # where self.current_page_index / self.current_page_buttom_class_name can be ignored. 
+    # @selenium 
     def initialize(self, url):
         self.url = url
         self.load_url(url)

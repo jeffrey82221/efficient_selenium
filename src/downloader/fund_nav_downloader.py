@@ -14,7 +14,7 @@ TODO:
     - [X] Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
     - [X] Step 6: Outside this function, allow combination of tmp and original
 """
-from src.page_extractor.fund_nav_extractor import NavView, IterationFailError
+from src.page_extractor.fund_nav_extractor import IterationFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
 import pandas as pd
 from functools import partial
@@ -30,9 +30,10 @@ import random
 import copy
 import shutil
 from datetime import datetime
-
+import joblib
+from pathlib import Path
 VERBOSE = False
-TQDM_VERBOSE = True
+TQDM_VERBOSE = False
 
 
 class PipeBuildFailError(BaseException):
@@ -42,17 +43,20 @@ class PipeBuildFailError(BaseException):
 class ExtractorBuildFailError(BaseException):
     pass
 
+# memory = joblib.Memory(cachedir='data/tmp', verbose=0)
+# @memory.cache
+def get_data(url):
+    try:
+        info_extractor = FundInfoExtractor(
+            FundDocumentPage().get_html(url))
+    except BaseException:
+        print(traceback.format_exc())
+        raise ExtractorBuildFailError()
+    return info_extractor.company, info_extractor.isin
 
 class _TablePathExtractor(object):
     def __init__(self, url):
-        try:
-            info_extractor = FundInfoExtractor(
-                FundDocumentPage().get_html(url))
-        except BaseException:
-            print(traceback.format_exc())
-            raise ExtractorBuildFailError()
-        self._isin = info_extractor.isin
-        self._company = info_extractor.company
+        self._company, self._isin = get_data(url)
         self.dir_name = 'nav'
 
     @property
@@ -65,7 +69,8 @@ class _TablePathExtractor(object):
 
     @property
     def folder_path(self):
-        return f'data/{self.dir_name}/{self._company}'
+        current_path = Path(__file__).parent.parent.parent
+        return os.path.join(current_path, f'data/{self.dir_name}/{self._company}')
 
     @property
     def tmp(self):
@@ -233,7 +238,10 @@ class _FundNavExtractActor:
             if not os.path.exists(directory):
                 os.makedirs(directory)
             table.to_hdf(path_extractor.table_path,
-                         'nav', append=True, format='table', data_columns=table.columns)
+                         'nav', append=True, format='table', 
+                         data_columns=table.columns)
+            if VERBOSE:
+                print(f'save to: {path_extractor.table_path}')
             return str(table['date'].values[-1])
         except BaseException:
             print(traceback.format_exc())
@@ -275,25 +283,23 @@ class ParallelFundNavDownloader:
     """
     TODO:
     - [ ] Filter the fund_link_generator to ignore re-download at the same day.
-    - [ ] Feature: Do not use SeleniumBase if the re-download time is later than 5 days ago. 
-        - [ ] Step 1: Build an HttpBase version FundNavExtractor, which only takes nav of the first page. 
-            - [ ] Refactor: 
-        - [ ] Step 2: in map ParallelFundNavDownloader, allow filtering of fund_links by whether or not 
+    - [-] Feature: Do not use SeleniumBase if the re-download time is later than 5 days ago. 
+        - [X] Step 1: Build an HttpBase version FundNavExtractor, which only takes nav of the first page. 
+            - [X] Refactor: split NavView into SeleniumNavView & HttpNavView
+        - [X] Step 2: Allow filtering of fund_links by whether or not 
             the latest date is later than 5 days ago. 
                 If true, send the items into the HttpBase Actor, else 
                 send it to the SeleniumBase Actor.
-        - [ ] Step 3: allow merging the stream produced by Selenium Actor and that produced by HttpBase Actor
-    
+        - [-] Step 3: Run HttpNavView-based and SeleniumNavView-based download
     """
-    def __init__(self, parallel_cnt):
-        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20, nav_view_cls=NavView)
+    def __init__(self, parallel_cnt, nav_view_cls):
+        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20, nav_view_cls=nav_view_cls)
                         for i in range(parallel_cnt)]
         self._pool = ActorPool(self._actors)
 
     def map(self, fund_link_generator):
         try:
-            return self._pool.map(lambda actor, input_tuple: actor.request.remote(input_tuple),
-                                  fund_link_generator)
+            return self._pool.map(lambda actor, input_tuple: actor.request.remote(input_tuple), fund_link_generator)
         except BaseException:
             print('start quiting actors')
             self.quite()
@@ -306,3 +312,39 @@ class ParallelFundNavDownloader:
                 print(f'quit actor: {actor}')
             except BaseException:
                 print(str(actor), 'selenium driver already quit')
+
+
+@ray.remote
+class _NewFundIdentifier:
+    def request(self, input_tuple):
+        fund, url = input_tuple
+        is_new = self.is_new_link(url)
+        return fund, url, is_new
+    def is_new_link(self, url):
+        """
+        Args: url (str)
+        Returns: (bool) Whether or not the page of url has been crawled less than 5 days ago
+        """
+        path_extractor = _TablePathExtractor(url)
+        if os.path.exists(path_extractor.table_path):
+            last_date_str = pd.read_hdf(
+                path_extractor.table_path,
+                'nav',
+                where='index=0').iloc[0].date
+            last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
+            if (datetime.now() - last_date).days < 10:
+                return True
+            else:
+                return False
+        else:
+            return False
+
+class ParallelUpdatedFundIdentifier:
+    def __init__(self, parallel_cnt):
+        self._actors = [_NewFundIdentifier.remote()
+                        for i in range(parallel_cnt)]
+        self._pool = ActorPool(self._actors)
+    def map(self, fund_link_generator):
+        return self._pool.map(
+            lambda actor, input_tuple: actor.request.remote(input_tuple), fund_link_generator)
+            

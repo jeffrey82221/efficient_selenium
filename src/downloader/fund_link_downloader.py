@@ -73,4 +73,5 @@ class ParallelFundLinkDownloader:
                 producer.switch_generator.remote(page_index)
                 page_index += 1
                 fund_link_item = ray.get(producer.next_item.remote())
-            yield fund_link_item
+            else:
+                yield fund_link_item

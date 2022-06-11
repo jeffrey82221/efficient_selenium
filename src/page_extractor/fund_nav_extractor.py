@@ -19,8 +19,6 @@ class _LastPageExtractor(HtmlBase):
         return page_count
 
 
-class IterationFailError(BaseException):
-    pass
 
 
 # TODO: Refactor # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

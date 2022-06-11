@@ -14,8 +14,9 @@ TODO:
     - [X] Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
     - [X] Step 6: Outside this function, allow combination of tmp and original
 """
-from src.page_extractor.fund_nav_extractor import IterationFailError
+from src.exceptions import IterationFailError, PipeBuildFailError, ExtractorBuildFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
+from src.utils import batch_generator
 import pandas as pd
 from functools import partial
 import tqdm
@@ -33,15 +34,6 @@ from datetime import datetime
 from pathlib import Path
 VERBOSE = False
 TQDM_VERBOSE = False
-
-
-class PipeBuildFailError(BaseException):
-    pass
-
-
-class ExtractorBuildFailError(BaseException):
-    pass
-
 
 def get_data(url):
     try:
@@ -166,38 +158,13 @@ class _FundNavExtractActor:
         estimated_batch_count = int(self.nav_view.max_page_count * (10. / batch_size))
         nav_gen = self.nav_view.nav_generator()
         nav_gen =  nav_filter(nav_gen)
-        return self._nav_batch_generator(nav_gen, batch_size=batch_size), estimated_batch_count
+        return batch_generator(nav_gen, batch_size=batch_size), estimated_batch_count
 
     # @common
     def build_nav_generator(self, url):
         self.nav_view.initialize(url)
         estimated_count = self.nav_view.max_page_count * 10
         return self.nav_view.nav_generator(), estimated_count
-
-    # @common
-    def _nav_batch_generator(self, nav_generator, batch_size=10):
-        """
-        Args:
-            - url: the url of the nav page
-            - batch_size: number of nav per page
-        """
-        try:
-            result = []
-            for date, nav in nav_generator:
-                result.append((date, nav))
-                if len(result) == batch_size:
-                    yield result
-                    result = []
-                    gc.collect()
-            if len(result) > 0:
-                yield result
-        except GeneratorExit as e:
-            raise e
-        except KeyboardInterrupt as e:
-            raise e
-        except BaseException:
-            print(traceback.format_exc())
-            raise IterationFailError()
 
     def _nav_filter(self, nav_gen):
         for date, nav in nav_gen:

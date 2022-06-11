@@ -28,51 +28,11 @@ import traceback
 import gc
 import time
 import random
-import copy
 import shutil
 from datetime import datetime
-from pathlib import Path
+from src.path import TablePathExtractor
 VERBOSE = False
-TQDM_VERBOSE = False
-
-H5_PATH = 'data/fund_info.h5'
-
-def get_data(fund_name):
-    try:
-        table = pd.read_hdf(
-            H5_PATH, 'raw', where=f'基金名稱=="{fund_name}"',
-            columns = ['ISIN', '基金管理公司'])
-        assert len(table) == 1
-        isin = table['ISIN'].values[0]
-        company = table['基金管理公司'].values[0]
-    except BaseException:
-        print(traceback.format_exc())
-        raise ExtractorBuildFailError()
-    return company, isin
-
-class _TablePathExtractor(object):
-    def __init__(self, fund_name):
-        self._company, self._isin = get_data(fund_name)
-        self.dir_name = 'nav'
-
-    @property
-    def isin(self):
-        return self._isin
-
-    @property
-    def table_path(self):
-        return f'{self.folder_path}/{self._isin}.h5'
-
-    @property
-    def folder_path(self):
-        current_path = Path(__file__).parent.parent.parent
-        return os.path.join(current_path, f'data/{self.dir_name}/{self._company}')
-
-    @property
-    def tmp(self):
-        new_path_extractor = copy.deepcopy(self)
-        new_path_extractor.dir_name = 'nav_tmp'
-        return new_path_extractor
+TQDM_VERBOSE = True
 
 
 @ray.remote
@@ -91,7 +51,7 @@ class _FundNavExtractActor:
                 self._first_try = False
             gc.collect()
             fund_name, url = input_tuple
-            self._path_extractor = _TablePathExtractor(fund_name)
+            self._path_extractor = TablePathExtractor(fund_name)
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] _path_extractor built')
             if os.path.exists(self._path_extractor.table_path):
@@ -296,7 +256,7 @@ class _NewFundIdentifier:
         Args: fund_name (str)
         Returns: (bool) Whether or not the page of url has been crawled less than 5 days ago
         """
-        path_extractor = _TablePathExtractor(fund_name)
+        path_extractor = TablePathExtractor(fund_name)
         if os.path.exists(path_extractor.table_path):
             last_date_str = pd.read_hdf(
                 path_extractor.table_path,

@@ -15,10 +15,11 @@ import os
 import traceback
 import warnings
 from tables import NaturalNameWarning
+from src.path import H5_PATH, FUND_LINK_PATH
+
 warnings.filterwarnings('ignore', category=NaturalNameWarning)
-fund_links_path = 'data/fund_links.pickle'
 try:
-    fund_links = pickle.load(open(fund_links_path, 'rb'))
+    fund_links = pickle.load(open(FUND_LINK_PATH, 'rb'))
 except BaseException:
     link_downloader = ParallelFundLinkDownloader(20)
     fund_links = list(
@@ -26,14 +27,10 @@ except BaseException:
             link_downloader.fund_link_generator(),
             desc='Extract Fund Links from Web',
             total=link_downloader.fund_count))
-    with open('data/fund_links.pickle', 'wb') as f:
+    with open(FUND_LINK_PATH, 'wb') as f:
         pickle.dump(fund_links, f)
 print(f'fund_links Loaded: {len(fund_links)}')
-COLS = ['基金名稱', '基金名稱 (英文)', '基金管理公司', '基金經理人', '基金規模', '基金註冊地', 
-        '投資地區', '計價幣別', '基金組別', '晨星組別', 'ISIN', '基準指數', '成立日期', '風險評等', 
-        '晨星評等', '投資策略', '最低認購金額', '申購手續費', '管理費', '最高管理費', '遞延費', '最高遞延費', '分銷費', '保管費']
 
-H5_PATH = 'data/fund_info.h5'
 BATCH_SIZE = 1000
 
 def save_to_h5(info_batch):

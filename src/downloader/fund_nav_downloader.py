@@ -35,18 +35,24 @@ from pathlib import Path
 VERBOSE = False
 TQDM_VERBOSE = False
 
-def get_data(url):
+H5_PATH = 'data/fund_info.h5'
+
+def get_data(fund_name):
     try:
-        info_extractor = FundInfoExtractor(
-            FundDocumentPage().get_html(url))
+        table = pd.read_hdf(
+            H5_PATH, 'raw', where=f'基金名稱=="{fund_name}"',
+            columns = ['ISIN', '基金管理公司'])
+        assert len(table) == 1
+        isin = table['ISIN'].values[0]
+        company = table['基金管理公司'].values[0]
     except BaseException:
         print(traceback.format_exc())
         raise ExtractorBuildFailError()
-    return info_extractor.company, info_extractor.isin
+    return company, isin
 
 class _TablePathExtractor(object):
-    def __init__(self, url):
-        self._company, self._isin = get_data(url)
+    def __init__(self, fund_name):
+        self._company, self._isin = get_data(fund_name)
         self.dir_name = 'nav'
 
     @property
@@ -84,8 +90,8 @@ class _FundNavExtractActor:
                 time.sleep(int(self._pending_time * random.random()))
                 self._first_try = False
             gc.collect()
-            fund, url = input_tuple
-            self._path_extractor = _TablePathExtractor(url)
+            fund_name, url = input_tuple
+            self._path_extractor = _TablePathExtractor(fund_name)
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] _path_extractor built')
             if os.path.exists(self._path_extractor.table_path):
@@ -94,7 +100,7 @@ class _FundNavExtractActor:
                 download_mode = 'full'
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] {download_mode} pipe built')
-            end_pipe = self._build_pipe(fund, url, download_mode=download_mode)
+            end_pipe = self._build_pipe(fund_name, url, download_mode=download_mode)
             agg_result = list(end_pipe)
             if VERBOSE:
                 print(
@@ -103,14 +109,14 @@ class _FundNavExtractActor:
                 self._update_h5()
                 if VERBOSE:
                     print(f'[request {input_tuple[0]}] h5 updated with {len(agg_result)} navs')
-            return f"NAV DOWNLOAD OF {fund}:{self._path_extractor.table_path} COMPLETE"
+            return f"NAV DOWNLOAD OF {fund_name}:{self._path_extractor.table_path} COMPLETE"
         except (PipeBuildFailError, ExtractorBuildFailError) as e:
-            result = f"NAV DOWNLOAD FAILED with {str(e)}:\n{fund}\nURL:\n{url}"
+            result = f"NAV DOWNLOAD FAILED with {str(e)}:\n{fund_name}\nURL:\n{url}"
             print(result)
             return result
         except (IterationFailError, KeyboardInterrupt):
             # KeyboardInterupt goes here
-            result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund}\nURL:\n{url}"
+            result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund_name}\nURL:\n{url}"
             print(result)
             print(traceback.format_exc())
             self._delete_h5(download_mode=download_mode)
@@ -282,15 +288,15 @@ class ParallelFundNavDownloader:
 @ray.remote
 class _NewFundIdentifier:
     def request(self, input_tuple):
-        fund, url = input_tuple
-        is_new = self.is_new_link(url)
+        fund_name, url = input_tuple
+        is_new = self.is_new_link(fund_name)
         return fund, url, is_new
-    def is_new_link(self, url):
+    def is_new_link(self, fund_name):
         """
-        Args: url (str)
+        Args: fund_name (str)
         Returns: (bool) Whether or not the page of url has been crawled less than 5 days ago
         """
-        path_extractor = _TablePathExtractor(url)
+        path_extractor = _TablePathExtractor(fund_name)
         if os.path.exists(path_extractor.table_path):
             last_date_str = pd.read_hdf(
                 path_extractor.table_path,

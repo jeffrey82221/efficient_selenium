@@ -18,7 +18,7 @@ except BaseException:
     with open(FUND_LINK_PATH, 'wb') as f:
         pickle.dump(fund_links, f)
 print(f'fund_links Loaded: {len(fund_links)}')
-full_nav_downloader = ParallelFundNavDownloader(10, SeleniumNavView)
+full_nav_downloader = ParallelFundNavDownloader(20, SeleniumNavView)
 _ = list(tqdm.tqdm(
         full_nav_downloader.map(fund_links),
         desc='Download Fund Navs',

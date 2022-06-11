@@ -21,3 +21,9 @@ Ref: https://docs.ray.io/en/latest/ray-overview/installation.html#m1-mac-apple-s
 
 1. `brew install hdf5 c-blosc lzo bzip2`
 2. `conda install pytables`
+
+
+
+TODO: 
+- [ ] Scan and create a download report for every fund with info of company , isin , name , last_nav_date, last_update_datee
+- [ ] Fix selenium time zone 

@@ -30,7 +30,6 @@ import random
 import copy
 import shutil
 from datetime import datetime
-import joblib
 from pathlib import Path
 VERBOSE = False
 TQDM_VERBOSE = False
@@ -43,8 +42,7 @@ class PipeBuildFailError(BaseException):
 class ExtractorBuildFailError(BaseException):
     pass
 
-# memory = joblib.Memory(cachedir='data/tmp', verbose=0)
-# @memory.cache
+
 def get_data(url):
     try:
         info_extractor = FundInfoExtractor(
@@ -81,13 +79,11 @@ class _TablePathExtractor(object):
 
 @ray.remote
 class _FundNavExtractActor:
-    # @refactor TODO: [X] allow different self._nav_view (provided from outside the class)
     def __init__(self, pending_time=0, nav_view_cls=None):
         self.nav_view = nav_view_cls()
         self._pending_time = pending_time
         self._first_try = True
 
-    # @common
     def request(self, input_tuple):
         try:
             if VERBOSE:
@@ -110,13 +106,11 @@ class _FundNavExtractActor:
             agg_result = list(end_pipe)
             if VERBOSE:
                 print(
-                    f'[request {input_tuple[0]}] {download_mode} download finish')
+                    f'[request {input_tuple[0]}] {download_mode} download {len(agg_result)} navs downloaded')
             if download_mode == 'partial' and len(agg_result) > 0:
-                if VERBOSE: 
-                    print(f'[request {input_tuple[0]}] len(agg_result): {len(agg_result)}')
                 self._update_h5()
                 if VERBOSE:
-                    print(f'[request {input_tuple[0]}] h5 updated')
+                    print(f'[request {input_tuple[0]}] h5 updated with {len(agg_result)} navs')
             return f"NAV DOWNLOAD OF {fund}:{self._path_extractor.table_path} COMPLETE"
         except (PipeBuildFailError, ExtractorBuildFailError) as e:
             result = f"NAV DOWNLOAD FAILED with {str(e)}:\n{fund}\nURL:\n{url}"
@@ -134,11 +128,9 @@ class _FundNavExtractActor:
             self.quit()
             raise e
 
-    # @selenium-base
     def quit(self):
         self.nav_view.quit()
 
-    # @common: TODO: [X] self._nav_selenium -> self._nav_view (allow SeleniumBase & HttpBase version)
     def _build_pipe(self, fund, url, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
         try:
@@ -167,13 +159,14 @@ class _FundNavExtractActor:
             print(traceback.format_exc())
             raise PipeBuildFailError()
 
-    # @common
+
     def _build_nav_batch_generator(
             self, url, batch_size=10, nav_filter=lambda x: x):
         self.nav_view.initialize(url)
         estimated_batch_count = int(self.nav_view.max_page_count * (10. / batch_size))
-        return self._nav_batch_generator(nav_filter(
-            self.nav_view.nav_generator()), batch_size=batch_size), estimated_batch_count
+        nav_gen = self.nav_view.nav_generator()
+        nav_gen =  nav_filter(nav_gen)
+        return self._nav_batch_generator(nav_gen, batch_size=batch_size), estimated_batch_count
 
     # @common
     def build_nav_generator(self, url):
@@ -196,22 +189,28 @@ class _FundNavExtractActor:
                     yield result
                     result = []
                     gc.collect()
+            if len(result) > 0:
+                yield result
+        except GeneratorExit as e:
+            raise e
         except KeyboardInterrupt as e:
             raise e
         except BaseException:
             print(traceback.format_exc())
             raise IterationFailError()
 
-    # @common
     def _nav_filter(self, nav_gen):
         for date, nav in nav_gen:
+            if VERBOSE:
+                print(f'[_nav_filter] date: {date}')
             if len(pd.read_hdf(self._path_extractor.table_path,
                    'nav', where=f'date=="{date}"')) >= 1:
+                if VERBOSE:
+                    print(f'[_nav_filter] filter break')
                 break
             else:
                 yield date, nav
 
-    # @common
     def _estimate_batch_count(self):
         last_date_str = pd.read_hdf(
             self._path_extractor.table_path,
@@ -220,7 +219,6 @@ class _FundNavExtractActor:
         last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
         return int((datetime.now() - last_date).days / 10 + 1)
 
-    # @common
     def _save_to_h5(self, nav_segment, download_mode='full'):
         try:
             assert download_mode == 'full' or download_mode == 'partial'
@@ -243,11 +241,12 @@ class _FundNavExtractActor:
             if VERBOSE:
                 print(f'save to: {path_extractor.table_path}')
             return str(table['date'].values[-1])
+        except GeneratorExit as e:
+            raise e
         except BaseException:
             print(traceback.format_exc())
             raise IterationFailError()
 
-    # @common
     def _update_h5(self):
         try:
             tmp_path_extractor = self._path_extractor.tmp
@@ -266,7 +265,6 @@ class _FundNavExtractActor:
         # Step 3: remove the tmp h5 file in nav_tmp
         os.remove(tmp_path_extractor.table_path)
 
-    # @common
     def _delete_h5(self, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
         if download_mode == 'partial':

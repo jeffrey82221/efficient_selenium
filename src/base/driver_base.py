@@ -28,6 +28,9 @@ class SeleniumBase(object):
             self.driver = webdriver.Chrome(
                 ChromeDriverManager().install(),
                 options=chrome_options)
+        tz_params = {'timezoneId': 'Asia/Shanghai'}
+        self.driver.execute_cdp_cmd('Emulation.setTimezoneOverride', tz_params)
+        print('TimeZone Set to Asia/Shanghai')
 
     def load_url(self, url):
         self.driver.get(url)

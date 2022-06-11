@@ -66,5 +66,7 @@ if not os.path.exists(H5_PATH):
         os.remove(H5_PATH)
         print(f'{H5_PATH} Removed')
 
-table = pd.read_hdf(H5_PATH, 'raw', where=f'基金管理公司=="貝萊德(盧森堡)公司"', 
-    columns = ['ISIN', '基金名稱', '基金名稱 (英文)', '基金規模'])
+table = pd.read_hdf(H5_PATH, 'raw', where=f'基金名稱=="貝萊德世界科技基金 A2"', 
+    columns = ['ISIN', '基金管理公司'])
+print(table['ISIN'].values[0])
+print(table['基金管理公司'].values[0])

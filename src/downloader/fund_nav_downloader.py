@@ -13,6 +13,7 @@ TODO:
     - [X] Step 4: run the pipe
     - [X] Step 5: allow passing of `filter` to the connection of nav_batch_generator (via callback)
     - [X] Step 6: Outside this function, allow combination of tmp and original
+- [ ] Allow swaping of .h5 from nav_tmp to nav for full download 
 """
 from src.exceptions import IterationFailError, PipeBuildFailError, ExtractorBuildFailError
 from src.page_extractor.fund_info_extractor import FundInfoExtractor, FundDocumentPage
@@ -32,7 +33,7 @@ import shutil
 from datetime import datetime
 from src.path import TablePathExtractor
 VERBOSE = False
-TQDM_VERBOSE = True
+TQDM_VERBOSE = False
 
 
 @ray.remote
@@ -54,6 +55,8 @@ class _FundNavExtractActor:
             self._path_extractor = TablePathExtractor(fund_name)
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] _path_extractor built')
+            if os.path.exists(self._path_extractor.tmp.table_path):
+                self._delete_h5()
             if os.path.exists(self._path_extractor.table_path):
                 download_mode = 'partial'
             else:
@@ -65,6 +68,10 @@ class _FundNavExtractActor:
             if VERBOSE:
                 print(
                     f'[request {input_tuple[0]}] {download_mode} download {len(agg_result)} navs downloaded')
+            if download_mode == 'full':
+                self._move_h5()
+                if VERBOSE:
+                    print(f'[request {input_tuple[0]}] move h5 from nav_tmp to nav')
             if download_mode == 'partial' and len(agg_result) > 0:
                 self._update_h5()
                 if VERBOSE:
@@ -79,7 +86,7 @@ class _FundNavExtractActor:
             result = f"NAV DOWNLOAD FAILED with IterationFailError:\n{fund_name}\nURL:\n{url}"
             print(result)
             print(traceback.format_exc())
-            self._delete_h5(download_mode=download_mode)
+            self._delete_h5()
             return result
         except BaseException as e:
             print(traceback.format_exc())
@@ -102,7 +109,7 @@ class _FundNavExtractActor:
                 nav_gen, batch_count = self._build_nav_batch_generator(
                     url)
             h5_pipe = map(
-                partial(self._save_to_h5, download_mode=download_mode),
+                self._save_to_h5,
                 nav_gen
             )
             if TQDM_VERBOSE:
@@ -152,13 +159,9 @@ class _FundNavExtractActor:
         last_date = datetime.strptime(last_date_str, "%Y/%m/%d")
         return int((datetime.now() - last_date).days / 10 + 1)
 
-    def _save_to_h5(self, nav_segment, download_mode='full'):
+    def _save_to_h5(self, nav_segment):
         try:
-            assert download_mode == 'full' or download_mode == 'partial'
-            if download_mode == 'partial':
-                path_extractor = self._path_extractor.tmp
-            else:
-                path_extractor = self._path_extractor
+            path_extractor = self._path_extractor.tmp
             if VERBOSE:
                 pprint.pprint(nav_segment)
             table = pd.DataFrame(nav_segment)
@@ -198,12 +201,20 @@ class _FundNavExtractActor:
         # Step 3: remove the tmp h5 file in nav_tmp
         os.remove(tmp_path_extractor.table_path)
 
-    def _delete_h5(self, download_mode='full'):
-        assert download_mode == 'full' or download_mode == 'partial'
-        if download_mode == 'partial':
-            path_extractor = self._path_extractor.tmp
-        else:
-            path_extractor = self._path_extractor
+    def _move_h5(self):
+        tmp_path_extractor = self._path_extractor.tmp
+        directory = self._path_extractor.folder_path
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        # Step 1: copy nav_tmp h5 file to nav
+        shutil.copyfile(
+            tmp_path_extractor.table_path,
+            self._path_extractor.table_path)
+        # Step 2: remove the tmp h5 file in nav_tmp
+        os.remove(tmp_path_extractor.table_path)
+
+    def _delete_h5(self):
+        path_extractor = self._path_extractor.tmp
         if os.path.exists(path_extractor.table_path):
             if VERBOSE:
                 print(f'delete {path_extractor.table_path}')

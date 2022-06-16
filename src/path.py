@@ -2,22 +2,39 @@ import pandas as pd
 import os
 import copy
 from pathlib import Path
-
+import traceback
+# import ray
+import functools
+from src.exceptions import ExtractorBuildFailError
+import shutil
 H5_PATH = 'data/fund_info.h5'
 FUND_LINK_PATH = 'data/fund_links.pickle'
 
-
-
 class TablePathExtractor(object):
-    def __init__(self, fund_name):
-        self._company, self._isin = TablePathExtractor.__get_data(fund_name)
+    def __init__(self, fund_name, id):
+        self._company, self._isin = TablePathExtractor.__get_data(fund_name, id)
         self.dir_name = 'nav'
+    
+    @staticmethod
+    def register(id):
+        shutil.copyfile(
+            H5_PATH,
+            TablePathExtractor._get_h5_path(id))
 
     @staticmethod
-    def __get_data(fund_name):
+    def unregister(id):
+        os.remove(TablePathExtractor._get_h5_path(id))
+        
+    @staticmethod
+    def _get_h5_path(id):
+        return f'{H5_PATH.split(".h5")[0]}_{id}.h5'
+
+    @staticmethod
+    @functools.lru_cache(maxsize=None)
+    def __get_data(fund_name, id):
         try:
             table = pd.read_hdf(
-                H5_PATH, 'raw', where=f'基金名稱=="{fund_name}"',
+                TablePathExtractor._get_h5_path(id), 'raw', where=f'基金名稱=="{fund_name}"', mode='r',
                 columns = ['ISIN', '基金管理公司'])
             assert len(table) == 1
             isin = table['ISIN'].values[0]

@@ -32,16 +32,19 @@ import random
 import shutil
 from datetime import datetime
 from src.path import TablePathExtractor
-VERBOSE = False
+VERBOSE = True
 TQDM_VERBOSE = False
 
 
 @ray.remote
 class _FundNavExtractActor:
-    def __init__(self, pending_time=0, nav_view_cls=None):
+    def __init__(self, pending_time=0, nav_view_cls=None, id=0):
         self.nav_view = nav_view_cls()
         self._pending_time = pending_time
         self._first_try = True
+        self._id = id # 用來產生每個remote專屬的fund_info.h5用的id
+        TablePathExtractor.register(self._id)
+        print(f'Start _FundNavExtractActor ({id})')
 
     def request(self, input_tuple):
         try:
@@ -52,7 +55,7 @@ class _FundNavExtractActor:
                 self._first_try = False
             gc.collect()
             fund_name, url = input_tuple
-            self._path_extractor = TablePathExtractor(fund_name)
+            self._path_extractor = TablePathExtractor(fund_name, self._id)
             if VERBOSE:
                 print(f'[request {input_tuple[0]}] _path_extractor built')
             if os.path.exists(self._path_extractor.tmp.table_path):
@@ -95,6 +98,7 @@ class _FundNavExtractActor:
 
     def quit(self):
         self.nav_view.quit()
+        TablePathExtractor.unregister(self._id)
 
     def _build_pipe(self, fund, url, download_mode='full'):
         assert download_mode == 'full' or download_mode == 'partial'
@@ -235,8 +239,14 @@ class ParallelFundNavDownloader:
         - [-] Step 3: Run HttpNavView-based and SeleniumNavView-based download
     """
     def __init__(self, parallel_cnt, nav_view_cls):
-        self._actors = [_FundNavExtractActor.remote(pending_time=parallel_cnt * 20, nav_view_cls=nav_view_cls)
-                        for i in range(parallel_cnt)]
+        self._actors = [
+            _FundNavExtractActor.remote(
+                pending_time=parallel_cnt * 20, 
+                nav_view_cls=nav_view_cls,
+                id = i
+            )
+                        for i in range(parallel_cnt)
+            ]
         self._pool = ActorPool(self._actors)
 
     def map(self, fund_link_generator):
